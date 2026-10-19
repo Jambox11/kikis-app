@@ -31,6 +31,19 @@ The old immediate `upgrade(new_wasm_hash)` entry point has been removed. A contr
 
 This mechanism gives users notice before the enforcement code changes. It does **not** make the single-admin model trustless: the admin can still rotate agent keys and change caps, allowlists, expiry, and freeze state. Every target Wasm hash must be reviewed, and operators should monitor upgrade events.
 
+#### Ledger sequence vs. wall-clock time
+
+The notice period is enforced **strictly in ledger sequence space**: `calculate_upgrade_ready_at` adds `UPGRADE_TIMELOCK_LEDGERS` to `env.ledger().sequence()`, and `execute_upgrade` gates on `env.ledger().sequence() >= ready_at_ledger`. Readiness is **never** gated on `env.ledger().timestamp()`.
+
+This is a deliberate choice. Ledger sequence is monotonic and cannot be manipulated by a single party, whereas wall-clock timestamps are only advisory and can drift. The 17,280-ledger constant assumes a nominal **5-second** close time (≈24 hours), but actual elapsed wall-clock time varies with network conditions:
+
+- Under congestion (e.g. ~6.5s close times) the notice period stretches to **>31 hours**.
+- If close times accelerate, the notice period shortens below 24 hours.
+
+Because the guarantee is expressed in ledgers, the notice period is always *at least* `UPGRADE_TIMELOCK_LEDGERS` ledgers of on-chain ordering, regardless of how long those ledgers take in wall-clock terms. Clients that need a human-readable estimate should treat it as advisory only.
+
+To make the tradeoff observable, the `upgrade_proposed` event emits both `ready_at_ledger` (the authoritative gate) and `estimated_ready_timestamp` (an advisory wall-clock estimate derived from the current ledger timestamp plus the nominal 5s-per-ledger delay). The estimate is informational and must not be used to decide whether an upgrade is executable.
+
 ### Guardian-assisted admin recovery
 
 The vault supports an optional guardian quorum so a single compromised or lost
