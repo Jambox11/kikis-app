@@ -62,6 +62,20 @@ export function getSupabaseServerClient(): ReturnType<typeof createClient> | nul
 export const SESSION_COLUMNS =
   'id, channel_id, payee, payer, cumulative_amount::text, status, network, opened_at, updated_at, settlement_tx_hash, open_tx_hash, voucher_count'
 
+/**
+ * Session lifecycle status. Mirrors the `sessions_status_check` constraint in
+ * `supabase/migrations/007_session_dispute_status.sql`, which adds the MPP
+ * dispute and on-chain refund states.
+ */
+export type SessionStatus =
+  | 'open'
+  | 'closing'
+  | 'closed'
+  | 'disputed'
+  | 'in-refund-window'
+  | 'refundable'
+  | 'refunded'
+
 export interface Session {
   id: string
   channel_id: string
@@ -69,7 +83,7 @@ export interface Session {
   payer: string
   /** Decimal USDC as text, e.g. "0.0000005" — see {@link SESSION_COLUMNS}. */
   cumulative_amount: string
-  status: 'open' | 'closing' | 'closed'
+  status: SessionStatus
   network: string
   opened_at: string
   updated_at: string
