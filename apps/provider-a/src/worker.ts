@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
   kikisAppHono,
@@ -237,115 +238,24 @@ function createApp(env: Env, ctx: ExecutionContext): Hono {
 
   const app = new Hono()
 
-  // Mounted at '*', not '/price', so kikisAppHono's own
-  // /.well-known/kikis-app.json branch serves the SIGNED manifest. Scoping it
-  // to /price leaves the well-known route unsigned, and mandatory signature
-  // verification (PR #86) then makes every client.pay() throw
-  // KikisAppSignatureError before any payment — issue #134. /health is
-  // answered in fetch() below, before this middleware can demand payment.
+  // Allow cross-origin browser agents to send payment headers on /price and
+  // read payment requirement/response headers back. Registered before the
+  // kikisAppHono mount so OPTIONS preflight is answered (204) before any
+  // payment middleware runs.
   app.use(
     '*',
-    kikisAppHono({
-      modes: ['x402', 'mpp-charge'],
-      pricing: { x402: X402_PRICE, 'mpp-charge': MPP_CHARGE_PRICE },
-      asset: 'USDC',
-      assetContract,
-      payee: env.STELLAR_PAYEE_ADDRESS,
-      network,
-      payeeSecretKey: env.STELLAR_PAYEE_SECRET,
-      manifest,
-      seenTxStore,
-      ...(env.OPENZEPPELIN_API_KEY ? { facilitatorApiKey: env.OPENZEPPELIN_API_KEY } : {}),
-      onSettled: async (txHash, amount, mode, payer) => {
-        console.log(`[settled] mode=${mode} txHash=${txHash} amount=${amount} payer=${payer ?? 'unknown'}`)
-        if (!supabase) return
-        const { error } = await supabase.from('tx_log').insert({
-          tx_type: mode === 'mpp-charge' ? 'mpp_charge' : 'x402_settle',
-          tx_hash: txHash,
-          amount: parseFloat(amount),
-          mode,
-          network,
-          provider_url: providerUrl,
-          agent_address: payer,
-          metadata: { settled_at: new Date().toISOString() },
-        })
-        if (error) console.error('[supabase] tx_log insert failed:', error.message)
-      },
+    cors({
+      origin: '*',
+      allowHeaders: [
+        'Payment-Signature',
+        'X-Payment',
+        'Authorization',
+        'Content-Type',
+        'X-Preferred-Mode',
+      ],
+      exposeHeaders: ['X-Payment-Requirements', 'X-Payment-Response', 'Payment-Receipt'],
     }),
   )
 
-  app.get('/price', async (c) => {
-    try {
-      const { data: orderbook, stale } = await getOrderBook(network, 1)
-      const ask = orderbook.asks[0]
-      const bid = orderbook.bids[0]
-
-      if (!ask || !bid) {
-        return c.json(
-          {
-            error: 'Orderbook unavailable — no asks or bids returned from Horizon',
-            asksLength: orderbook.asks.length,
-            bidsLength: orderbook.bids.length,
-          },
-          503,
-        )
-      }
-
-      const midPrice = (parseFloat(ask.price) + parseFloat(bid.price)) / 2
-
-      // Horizon was rate-limiting or down; this quote comes from the fallback
-      // snapshot, so let the caller know it is not a live reading.
-      if (stale) c.header('X-Orderbook-Stale', 'true')
-
-      return c.json({
-        price: midPrice.toFixed(7),
-        pair: 'XLM/USDC',
-        timestamp: new Date().toISOString(),
-        source: 'stellar-dex',
-        network,
-      })
-    } catch (err) {
-      console.error('[horizon] orderbook error:', err)
-      return c.json({ error: 'Upstream Horizon error' }, 502)
-    }
-  })
-
-  return app
-}
-
-function healthResponse(env: Env): Response {
-  const addr = env.STELLAR_PAYEE_ADDRESS
-  const network = resolveNetwork(env.STELLAR_NETWORK)
-  const missing = findStartupProblems(env, network)
-  return Response.json(
-    {
-      status: missing.length > 0 ? 'misconfigured' : 'ok',
-      network,
-      payee: addr ? `${addr.slice(0, 6)}...${addr.slice(-4)}` : 'not configured',
-      registry: env.SUPABASE_URL && env.SUPABASE_SERVICE_KEY ? 'connected' : 'not configured',
-      ...(missing.length > 0 ? { missing } : {}),
-    },
-    { status: missing.length > 0 ? 503 : 200 },
-  )
-}
-
-/**
- * Workers hand `env` to `fetch`, so the app cannot be built at module scope the
- * way the Express server was. Build once per isolate and reuse.
- */
-let cachedApp: Hono | null = null
-
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    // Answered before the app so the '*' payment middleware never sees it.
-    if (new URL(request.url).pathname === '/health') return healthResponse(env)
-
-    try {
-      cachedApp ??= createApp(env, ctx)
-    } catch (err) {
-      console.error('[startup]', err)
-      return Response.json({ error: 'Provider misconfigured' }, { status: 500 })
-    }
-    return cachedApp.fetch(request, env, ctx)
-  },
-}
+  // Mounted at '*', not '/price', so kikisAppHono's own
+  // /.well-known/kikis-app.json branch serves the SIGNED manifest. Scoping it
