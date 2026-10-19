@@ -405,3 +405,8 @@ The [**Multi-Chain Roadmap**](docs/MULTICHAIN_ROADMAP.md) sketches a `ChainAdapt
 ## License
 
 MIT
+
+## Handsoff notes
+
+<!-- handsoff-issue-68 -->
+- #68: [MCP] Handle Horizon 404 Unfunded Account Errors Gracefully in `handleCheckBalance`
