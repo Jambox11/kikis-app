@@ -43,6 +43,34 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'estimate_cost',
+    description:
+      'Estimate the financial cost of a provider data feed or API endpoint before paying, so an agent can plan budgets and request human approval if costs exceed thresholds. Returns the asset, amount, network fees, required trustlines, and payment mode. Supports both discrete per-request estimation and streaming session estimation (pass mode "mpp-session" or "mpp-session-ws" with an optional session_duration_seconds).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description:
+            'The full URL of the provider endpoint to estimate (e.g., https://api-a.kikis-app.xyz/price)',
+        },
+        mode: {
+          type: 'string',
+          enum: ['x402', 'mpp-charge', 'mpp-session', 'mpp-session-ws'],
+          description:
+            'Optional payment mode to estimate. Discrete modes ("x402", "mpp-charge") estimate a single request; streaming modes ("mpp-session", "mpp-session-ws") estimate a session. If not specified, the best mode is selected automatically.',
+        },
+        session_duration_seconds: {
+          type: 'integer',
+          minimum: 1,
+          description:
+            'Optional session duration in seconds for streaming session estimation (mpp-session or mpp-session-ws). Ignored for discrete modes.',
+        },
+      },
+      required: ['url'],
+    },
+  },
+  {
     name: 'open_session',
     description:
       "Open a sustained MPP session with a provider for streaming data. Requires COMMITMENT_SECRET to be configured. Returns a channel_id — pass it to stream_session to pull data and to close_session when done, or the channel collateral can never be settled.",
