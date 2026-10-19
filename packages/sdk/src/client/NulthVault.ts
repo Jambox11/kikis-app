@@ -182,4 +182,15 @@ export async function prepareNulthSigner(
   }
 }
 
+/**
+ * Roll back an off-chain daily spend reservation after a failed Nulth payment
+ * submission (e.g. Horizon 504, bad sequence number, or node drop).
+ *
+ * Delegates to `NulthClient.rollbackPayment`, which asserts the accumulator
+ * cannot underflow before subtracting `amountStroops`.
+ */
+export function rollbackNulthSpend(client: NulthClient, amountStroops: bigint): void {
+  client.rollbackPayment(amountStroops)
+}
+
 export type { VaultMode }
