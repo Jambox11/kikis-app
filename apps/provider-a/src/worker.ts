@@ -52,6 +52,14 @@ function resolveAssetContract(env: Env, network: Network): string {
 }
 
 /**
+ * A Stellar secret key is a 56-character StrKey starting with 'S'.
+ * We only check shape here — never log or return the value itself.
+ */
+function isStellarSecretKey(value: string | undefined): boolean {
+  return typeof value === 'string' && value.length === 56 && value.startsWith('S')
+}
+
+/**
  * Return the names of environment variables that are unset or malformed.
  * Values are never included — only names, so this is safe to log or return
  * to a caller directly. Shared by createApp (throws, caught by fetch() below)
@@ -59,7 +67,7 @@ function resolveAssetContract(env: Env, network: Network): string {
  */
 function findStartupProblems(env: Env, network: Network): string[] {
   const problems: string[] = []
-  if (!env.STELLAR_PAYEE_SECRET || !env.STELLAR_PAYEE_SECRET.startsWith('S')) {
+  if (!isStellarSecretKey(env.STELLAR_PAYEE_SECRET)) {
     problems.push('STELLAR_PAYEE_SECRET')
   }
   if (!env.STELLAR_PAYEE_ADDRESS) {
@@ -69,6 +77,20 @@ function findStartupProblems(env: Env, network: Network): string[] {
     problems.push('USDC_ASSET_CONTRACT')
   }
   return problems
+}
+
+/**
+ * Validate required worker environment variables at cold start.
+ * Throws with the exact missing/malformed key names so misconfiguration
+ * fails fast during initialization instead of mid-transaction.
+ */
+export function validateWorkerEnv(env: Env): void {
+  const network = resolveNetwork(env.STELLAR_NETWORK)
+  const problems = findStartupProblems(env, network)
+  if (problems.length > 0) {
+    console.error(`[startup] Provider misconfigured: ${problems.join(', ')}`)
+    throw new Error(`Provider misconfigured: ${problems.join(', ')} unset or malformed`)
+  }
 }
 
 /**
@@ -207,10 +229,7 @@ export async function getOrderBook(network: Network, limit: number): Promise<Ord
 function createApp(env: Env, ctx: ExecutionContext): Hono {
   const network = resolveNetwork(env.STELLAR_NETWORK)
 
-  const problems = findStartupProblems(env, network)
-  if (problems.length > 0) {
-    throw new Error(`Provider misconfigured: ${problems.join(', ')} unset`)
-  }
+  validateWorkerEnv(env)
 
   const assetContract = resolveAssetContract(env, network)
   const manifest = buildManifest({ network, payee: env.STELLAR_PAYEE_ADDRESS, assetContract })
@@ -239,23 +258,6 @@ function createApp(env: Env, ctx: ExecutionContext): Hono {
   const app = new Hono()
 
   // Allow cross-origin browser agents to send payment headers on /price and
-  // read payment requirement/response headers back. Registered before the
-  // kikisAppHono mount so OPTIONS preflight is answered (204) before any
-  // payment middleware runs.
-  app.use(
-    '*',
-    cors({
-      origin: '*',
-      allowHeaders: [
-        'Payment-Signature',
-        'X-Payment',
-        'Authorization',
-        'Content-Type',
-        'X-Preferred-Mode',
-      ],
-      exposeHeaders: ['X-Payment-Requirements', 'X-Payment-Response', 'Payment-Receipt'],
-    }),
-  )
+  // read payment requirem
 
-  // Mounted at '*', not '/price', so kikisAppHono's own
-  // /.well-known/kikis-app.json branch serves the SIGNED manifest. Scoping it
+/* … truncated 600 chars — edit only what you need near the top … */
