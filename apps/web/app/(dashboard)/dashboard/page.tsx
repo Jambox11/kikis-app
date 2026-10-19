@@ -17,6 +17,9 @@ import { VoucherChart } from '@/components/dashboard/VoucherChart'
 import type { DashboardStatsRow } from '@/lib/dashboardMetrics'
 import type { Session, TxLogEntry } from '@/lib/supabase'
 
+const SESSIONS_PAGE_SIZE = 50
+const TX_LOG_PAGE_SIZE = 20
+
 async function fetchDashboardData() {
   const supabase = getSupabaseServerClient()
 
@@ -25,12 +28,12 @@ async function fetchDashboardData() {
       .from('public_sessions')
       .select(SESSION_COLUMNS)
       .order('opened_at', { ascending: false })
-      .limit(50),
+      .limit(SESSIONS_PAGE_SIZE),
     supabase
       .from('tx_log')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(20),
+      .limit(TX_LOG_PAGE_SIZE),
     supabase.from('public_dashboard_stats').select('*').maybeSingle(),
   ])
 
@@ -56,6 +59,48 @@ async function fetchDashboardData() {
   }
 }
 
+/**
+ * Cursor-based pagination for the dashboard feeds.
+ *
+ * Accepts a `cursor` (ISO timestamp of the last row already shown) and a `limit`,
+ * and returns the next batch ordered by the indexed timestamp column. The cursor
+ * is exclusive (`WHERE opened_at < cursor` / `WHERE created_at < cursor`) so
+ * subsequent pages never overlap with rows already rendered.
+ */
+export async function loadMoreSessions(cursor: string, limit = SESSIONS_PAGE_SIZE) {
+  const supabase = getSupabaseServerClient()
+  const { data, error } = await supabase
+    .from('public_sessions')
+    .select(SESSION_COLUMNS)
+    .lt('opened_at', cursor)
+    .order('opened_at', { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    console.error('[dashboard] failed to paginate public_sessions:', error.message)
+    throw new Error(error.message)
+  }
+
+  return (data ?? []) as Session[]
+}
+
+export async function loadMoreTxLog(cursor: string, limit = TX_LOG_PAGE_SIZE) {
+  const supabase = getSupabaseServerClient()
+  const { data, error } = await supabase
+    .from('tx_log')
+    .select('*')
+    .lt('created_at', cursor)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    console.error('[dashboard] failed to paginate tx_log:', error.message)
+    throw new Error(error.message)
+  }
+
+  return (data ?? []) as TxLogEntry[]
+}
+
 export default async function DashboardPage() {
   const { sessions, txLog, stats, hasError } = await fetchDashboardData()
 
@@ -77,10 +122,18 @@ export default async function DashboardPage() {
         {/* Session table + Tx feed */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <SessionTable initialSessions={sessions} />
+            <SessionTable
+              initialSessions={sessions}
+              pageSize={SESSIONS_PAGE_SIZE}
+              loadMore={loadMoreSessions}
+            />
           </div>
           <div className="lg:col-span-1 min-h-[400px]">
-            <TxFeed initialEntries={txLog} />
+            <TxFeed
+              initialEntries={txLog}
+              pageSize={TX_LOG_PAGE_SIZE}
+              loadMore={loadMoreTxLog}
+            />
           </div>
         </div>
 
