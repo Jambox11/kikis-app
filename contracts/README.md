@@ -31,6 +31,31 @@ The old immediate `upgrade(new_wasm_hash)` entry point has been removed. A contr
 
 This mechanism gives users notice before the enforcement code changes. It does **not** make the single-admin model trustless: the admin can still rotate agent keys and change caps, allowlists, expiry, and freeze state. Every target Wasm hash must be reviewed, and operators should monitor upgrade events.
 
+### Guardian-assisted admin recovery
+
+The vault supports an optional guardian quorum so a single compromised or lost
+admin key cannot permanently brick the vault. Guardians are configured by the
+admin and stored in instance storage:
+
+- `set_guardians(guardians, threshold)` — admin only; sets the guardian set and the
+  number of approvals required (`threshold` must be `>= 1` and `<= guardians.len()`).
+  Passing an empty list disables guardian recovery.
+- `guardians()` / `guardian_threshold()` — read the current configuration.
+- `propose_admin_rotation(new_admin)` — a guardian proposes replacing the admin;
+  stores the target and the earliest executable ledger (a fixed timelock) and
+  emits `admin_rotation_proposed`.
+- `approve_admin_rotation(guardian)` — each guardian approves the pending proposal;
+  emits `admin_rotation_approved`.
+- `execute_admin_rotation()` — succeeds once at least `guardian_threshold` distinct
+  guardians have approved **and** the timelock has elapsed; sets the new admin,
+  clears the proposal, and emits `admin_rotated`. This path does **not** require
+  the current admin's authorization, so an unresponsive admin can be replaced.
+- `cancel_admin_rotation()` — admin only; clears a pending proposal.
+
+Guardian recovery is opt-in: when no guardians are configured the vault behaves
+exactly as before. The timelock gives the incumbent admin (and users) notice to
+react to a malicious or mistaken rotation before it takes effect.
+
 ### Prerequisites
 
 - Rust toolchain with `wasm32-unknown-unknown` target
