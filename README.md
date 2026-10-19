@@ -405,3 +405,8 @@ The [**Multi-Chain Roadmap**](docs/MULTICHAIN_ROADMAP.md) sketches a `ChainAdapt
 ## License
 
 MIT
+
+## Handsoff notes
+
+<!-- handsoff-issue-81 -->
+- #81: [Security] Enforce Maximum In-Flight Collateral Cap Across Multiple Concurrent Open Sessions
