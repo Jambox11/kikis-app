@@ -8,20 +8,39 @@ export function sha256Hex(data: Buffer | string): string {
   return createHash('sha256').update(buf).digest('hex')
 }
 
+/**
+ * Canonical binary preimage serializer.
+ *
+ * Encodes each field as a 32-bit big-endian length prefix followed by its
+ * UTF-8 bytes (TLV-style). This makes the encoding unambiguous: no field
+ * content (including pipe characters or other delimiters) can shift the
+ * boundary between fields, preventing delimiter-injection collisions.
+ */
+export function encodePreimage(fields: readonly string[]): Buffer {
+  const parts: Buffer[] = []
+  for (const field of fields) {
+    const data = Buffer.from(field, 'utf8')
+    const len = Buffer.alloc(4)
+    len.writeUInt32BE(data.length, 0)
+    parts.push(len, data)
+  }
+  return Buffer.concat(parts)
+}
+
 /** Commitment to the daily cap — cap value never appears on-chain */
 export function commitDailyCap(dailyCapStroops: bigint, witnessSecret: string): string {
-  return sha256Hex(`${witnessSecret}:cap:${dailyCapStroops.toString()}`)
+  return sha256Hex(encodePreimage([witnessSecret, 'cap', dailyCapStroops.toString()]))
 }
 
 /** Commitment to sorted allowlist — individual payees never published */
 export function commitAllowlist(payees: readonly string[], witnessSecret: string): string {
-  const sorted = [...payees].sort().join(',')
-  return sha256Hex(`${witnessSecret}:allowlist:${sorted}`)
+  const sorted = [...payees].sort()
+  return sha256Hex(encodePreimage([witnessSecret, 'allowlist', ...sorted]))
 }
 
 /** Hash a payee for public inputs without revealing the full allowlist */
 export function hashPayee(payee: string): string {
-  return sha256Hex(`payee:${payee}`)
+  return sha256Hex(encodePreimage(['payee', payee]))
 }
 
 /** Ledger day bucket aligned with agent-vault (17280 ledgers ≈ 24h) */
@@ -135,8 +154,9 @@ export const DEFAULT_PROVER: ProverBackend = 'mock'
  *
  * @internal
  */
-export function insecureMockProof(preimage: string): string {
-  return createHash('sha512').update(`nulth:${preimage}`).digest('base64')
+export function insecureMockProof(preimage: string | Buffer): string {
+  const buf = typeof preimage === 'string' ? Buffer.from(preimage, 'utf8') : preimage
+  return createHash('sha512').update(Buffer.concat([Buffer.from('nulth:', 'utf8'), buf])).digest('base64')
 }
 
 /** Encode proof as the Soroban auth signature Val (base64 JSON) */
