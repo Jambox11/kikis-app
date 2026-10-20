@@ -150,5 +150,7 @@ jobs:
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install
+      - name: Check formatting (Prettier)
+        run: pnpm format:check
       - name: Lint
         run: pnpm -r lint

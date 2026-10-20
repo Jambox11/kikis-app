@@ -33,7 +33,7 @@ async function fetchDashboardData(network: DashboardNetwork) {
       .select(SESSION_COLUMNS)
       .eq('network', network)
       .order('opened_at', { ascending: false })
-      .limit(50),
+      .limit(SESSIONS_PAGE_SIZE),
     supabase
       .from('tx_log')
       .select('*')
@@ -112,10 +112,18 @@ export default async function DashboardPage({
         {/* Session table + Tx feed */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <SessionTable initialSessions={sessions} />
+            <SessionTable
+              initialSessions={sessions}
+              pageSize={SESSIONS_PAGE_SIZE}
+              loadMore={loadMoreSessions}
+            />
           </div>
           <div className="lg:col-span-1 min-h-[400px]">
-            <TxFeed initialEntries={txLog} />
+            <TxFeed
+              initialEntries={txLog}
+              pageSize={TX_LOG_PAGE_SIZE}
+              loadMore={loadMoreTxLog}
+            />
           </div>
         </div>
 

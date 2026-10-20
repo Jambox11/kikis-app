@@ -17,6 +17,8 @@ const STATUS_VARIANT: Record<Session['status'], StatusVariant> = {
   closed: 'neutral',
 }
 
+const PAGE_SIZE = 50
+
 interface SessionTableProps {
   initialSessions?: Session[]
 }
@@ -24,6 +26,8 @@ interface SessionTableProps {
 export function SessionTable({ initialSessions = [] }: SessionTableProps) {
   const [sessions, setSessions] = useState<Session[]>(initialSessions)
   const [refreshFailed, setRefreshFailed] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(initialSessions.length >= PAGE_SIZE)
 
   const refreshSessions = useCallback(async () => {
     const supabase = getSupabaseBrowserClient()
@@ -31,7 +35,7 @@ export function SessionTable({ initialSessions = [] }: SessionTableProps) {
       .from('public_sessions')
       .select(SESSION_COLUMNS)
       .order('opened_at', { ascending: false })
-      .limit(50)
+      .limit(PAGE_SIZE)
 
     if (error) {
       // Keep the rows already on screen instead of blanking the table.
@@ -40,8 +44,40 @@ export function SessionTable({ initialSessions = [] }: SessionTableProps) {
       return
     }
     setRefreshFailed(false)
-    if (data) setSessions(data as Session[])
+    if (data) {
+      setSessions(data as Session[])
+      setHasMore(data.length >= PAGE_SIZE)
+    }
   }, [])
+
+  const loadMore = useCallback(async () => {
+    const cursor = sessions[sessions.length - 1]?.opened_at
+    if (!cursor || loadingMore) return
+
+    setLoadingMore(true)
+    const supabase = getSupabaseBrowserClient()
+    const { data, error } = await supabase
+      .from('public_sessions')
+      .select(SESSION_COLUMNS)
+      .lt('opened_at', cursor)
+      .order('opened_at', { ascending: false })
+      .limit(PAGE_SIZE)
+
+    if (error) {
+      console.warn('[sessions] failed to load more public_sessions:', error.message)
+      setRefreshFailed(true)
+      setLoadingMore(false)
+      return
+    }
+
+    const batch = (data ?? []) as Session[]
+    setSessions((prev) => {
+      const seen = new Set(prev.map((s) => s.id))
+      return [...prev, ...batch.filter((s) => !seen.has(s.id))]
+    })
+    setHasMore(batch.length >= PAGE_SIZE)
+    setLoadingMore(false)
+  }, [sessions, loadingMore])
 
   useEffect(() => {
     const initialRefresh = setTimeout(() => void refreshSessions(), 0)
@@ -159,6 +195,22 @@ export function SessionTable({ initialSessions = [] }: SessionTableProps) {
           </tbody>
         </table>
       </div>
+      {sessions.length > 0 && (
+        <div className="flex items-center justify-center border-t border-[var(--border-default)] px-5 py-3">
+          {hasMore ? (
+            <button
+              type="button"
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+              className="rounded-lg border border-[var(--border-default)] px-4 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-subtle)] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loadingMore ? 'Loading…' : 'Load More'}
+            </button>
+          ) : (
+            <span className="text-xs text-[var(--text-muted)]">End of list</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
