@@ -408,5 +408,8 @@ MIT
 
 ## Handsoff notes
 
-<!-- handsoff-issue-81 -->
-- #81: [Security] Enforce Maximum In-Flight Collateral Cap Across Multiple Concurrent Open Sessions
+<!-- handsoff-issue-63 -->
+- #63: [Contracts] Add Expiration Grace Window to Pending Wasm Upgrades in Agent Vault Contract
+
+<!-- handsoff-issue-64 -->
+- #64: [Contracts] Implement Contract View Function for Current Daily Spend and Remaining Allowance

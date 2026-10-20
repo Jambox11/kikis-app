@@ -140,6 +140,24 @@ export class NulthClient {
     return proof
   }
 
+  /**
+   * Roll back a previously reserved off-chain daily spend when the
+   * corresponding transaction submission fails, restoring the available
+   * daily allowance. Throws if the rollback would underflow the accumulator.
+   */
+  rollbackPayment(amountStroops: bigint): void {
+    if (amountStroops < 0n) {
+      throw new RangeError(`Invalid amountStroops: ${amountStroops}`)
+    }
+    if (this.policy.dailySpendStroops < amountStroops) {
+      throw new NulthPolicyError(
+        'rollback_underflow',
+        `Cannot roll back ${amountStroops} stroops; current daily spend is ${this.policy.dailySpendStroops}`,
+      )
+    }
+    this.policy.dailySpendStroops -= amountStroops
+  }
+
   /** Encode proof for SorobanAddressCredentials.signature */
   encodeProof(proof: NulthProof): string {
     return encodeAuthSignature(proof)
