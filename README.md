@@ -408,5 +408,8 @@ MIT
 
 ## Handsoff notes
 
-<!-- handsoff-issue-68 -->
-- #68: [MCP] Handle Horizon 404 Unfunded Account Errors Gracefully in `handleCheckBalance`
+<!-- handsoff-issue-63 -->
+- #63: [Contracts] Add Expiration Grace Window to Pending Wasm Upgrades in Agent Vault Contract
+
+<!-- handsoff-issue-64 -->
+- #64: [Contracts] Implement Contract View Function for Current Daily Spend and Remaining Allowance
