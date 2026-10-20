@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getSupabaseBrowserClient, type TxLogEntry } from '@/lib/supabase'
+import { getSupabaseBrowserClient, isSupabaseConfigured, type TxLogEntry } from '@/lib/supabase'
 import { mergeTxEntries } from '@/lib/mergeTxEntries'
 import { ModeBadge } from '@/components/shared/ModeBadge'
 import { RelativeTime } from '@/components/shared/RelativeTime'
@@ -41,7 +41,11 @@ export function TxFeed({ initialEntries = [] }: TxFeedProps) {
   )
 
   useEffect(() => {
+    if (!configured) return
+
     const supabase = getSupabaseBrowserClient()
+    if (!supabase) return
+
     let disposed = false
     let pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -122,7 +126,7 @@ export function TxFeed({ initialEntries = [] }: TxFeedProps) {
       stopPolling()
       void supabase.removeChannel(channel)
     }
-  }, [])
+  }, [configured])
 
   // Cursor-based pagination: fetch the next batch strictly older than the
   // oldest row currently shown, using the indexed created_at column.
@@ -168,7 +172,17 @@ export function TxFeed({ initialEntries = [] }: TxFeedProps) {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {entries.length === 0 ? (
+        {!configured ? (
+          <div className="px-5 py-8 text-center">
+            <p className="text-sm font-medium text-[var(--text-primary)]">Supabase not configured</p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Copy <code className="font-mono">.env.example</code> to{' '}
+              <code className="font-mono">.env.local</code> and set{' '}
+              <code className="font-mono">NEXT_PUBLIC_SUPABASE_URL</code> and{' '}
+              <code className="font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to see live transactions.
+            </p>
+          </div>
+        ) : entries.length === 0 ? (
           <div className="px-5 py-8 text-center">
             <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--text-muted)] animate-pulse" />

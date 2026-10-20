@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { getSupabaseBrowserClient } from '@/lib/supabase'
+import { getSupabaseBrowserClient, isSupabaseConfigured } from '@/lib/supabase'
 import { toDashboardMetrics, type DashboardStatsRow } from '@/lib/dashboardMetrics'
 import { MetricCard } from '@/components/dashboard/MetricCard'
 import { RelativeTime } from '@/components/shared/RelativeTime'
@@ -24,11 +24,13 @@ export function DashboardMetrics({ initialStats }: DashboardMetricsProps) {
 
   const refreshStats = useCallback(async () => {
     const supabase = getSupabaseBrowserClient()
+    if (!supabase) return
     const { data } = await supabase.from('public_dashboard_stats').select('*').maybeSingle()
     if (data) setStats(data as DashboardStatsRow)
   }, [])
 
   useEffect(() => {
+    if (!configured) return
     // `set-state-in-effect` (error in eslint-plugin-react-hooks v6) forbids a
     // synchronous setState in the effect body, so the first refresh is deferred.
     const initialRefresh = setTimeout(() => {
@@ -56,7 +58,30 @@ export function DashboardMetrics({ initialStats }: DashboardMetricsProps) {
       setRealtimeConnected(false)
       void supabase.removeChannel(channel)
     }
-  }, [refreshStats])
+  }, [refreshStats, configured])
+
+  if (!configured) {
+    return (
+      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-6">
+        <h2 className="text-lg font-semibold text-amber-200">Supabase not configured</h2>
+        <p className="mt-2 text-sm text-amber-100/80">
+          Dashboard metrics are unavailable until Supabase credentials are set.
+        </p>
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-amber-100/80">
+          <li>
+            Copy <code className="rounded bg-black/30 px-1">.env.example</code> to{' '}
+            <code className="rounded bg-black/30 px-1">.env.local</code> in{' '}
+            <code className="rounded bg-black/30 px-1">apps/web</code>.
+          </li>
+          <li>
+            Set <code className="rounded bg-black/30 px-1">NEXT_PUBLIC_SUPABASE_URL</code> and{' '}
+            <code className="rounded bg-black/30 px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.
+          </li>
+          <li>Restart the dev server.</li>
+        </ol>
+      </div>
+    )
+  }
 
   useEffect(() => {
     // Poll less aggressively while the realtime channel is live; fall back to
