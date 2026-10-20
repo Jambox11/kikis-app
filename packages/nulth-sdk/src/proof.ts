@@ -8,6 +8,29 @@ export function sha256Hex(data: Buffer | string): string {
   return createHash('sha256').update(buf).digest('hex')
 }
 
+/**
+ * Canonical length-prefixed encoding of a list of strings.
+ *
+ * Layout: `count` as big-endian u32, then for each item its UTF-8 byte
+ * length as big-endian u32 followed by its UTF-8 bytes. This is unambiguous
+ * and immune to delimiter injection / prefix collisions.
+ */
+export function canonicalEncodeStrings(items: readonly string[]): Uint8Array {
+  const encoded = items.map((item) => Buffer.from(item, 'utf8'))
+  const total = 4 + encoded.reduce((sum, buf) => sum + 4 + buf.length, 0)
+  const out = Buffer.allocUnsafe(total)
+  let offset = 0
+  out.writeUInt32BE(encoded.length, offset)
+  offset += 4
+  for (const buf of encoded) {
+    out.writeUInt32BE(buf.length, offset)
+    offset += 4
+    buf.copy(out, offset)
+    offset += buf.length
+  }
+  return out
+}
+
 /** Commitment to the daily cap — cap value never appears on-chain */
 export function commitDailyCap(dailyCapStroops: bigint, witnessSecret: string): string {
   return sha256Hex(`${witnessSecret}:cap:${dailyCapStroops.toString()}`)
@@ -15,8 +38,12 @@ export function commitDailyCap(dailyCapStroops: bigint, witnessSecret: string): 
 
 /** Commitment to sorted allowlist — individual payees never published */
 export function commitAllowlist(payees: readonly string[], witnessSecret: string): string {
-  const sorted = [...payees].sort().join(',')
-  return sha256Hex(`${witnessSecret}:allowlist:${sorted}`)
+  const sorted = [...payees].sort()
+  const preimage = Buffer.concat([
+    Buffer.from(`${witnessSecret}:allowlist:`, 'utf8'),
+    Buffer.from(canonicalEncodeStrings(sorted)),
+  ])
+  return sha256Hex(preimage)
 }
 
 /** Hash a payee for public inputs without revealing the full allowlist */
