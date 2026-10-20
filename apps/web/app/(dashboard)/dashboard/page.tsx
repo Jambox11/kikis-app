@@ -17,24 +17,34 @@ import { VoucherChart } from '@/components/dashboard/VoucherChart'
 import type { DashboardStatsRow } from '@/lib/dashboardMetrics'
 import type { Session, TxLogEntry } from '@/lib/supabase'
 
-const SESSIONS_PAGE_SIZE = 50
-const TX_LOG_PAGE_SIZE = 20
+type DashboardNetwork = 'testnet' | 'mainnet'
 
-async function fetchDashboardData() {
+function resolveNetwork(value: string | string[] | undefined): DashboardNetwork {
+  const raw = Array.isArray(value) ? value[0] : value
+  return raw === 'mainnet' ? 'mainnet' : 'testnet'
+}
+
+async function fetchDashboardData(network: DashboardNetwork) {
   const supabase = getSupabaseServerClient()
 
   const [sessionsRes, txLogRes, statsRes] = await Promise.all([
     supabase
       .from('public_sessions')
       .select(SESSION_COLUMNS)
+      .eq('network', network)
       .order('opened_at', { ascending: false })
       .limit(SESSIONS_PAGE_SIZE),
     supabase
       .from('tx_log')
       .select('*')
+      .eq('network', network)
       .order('created_at', { ascending: false })
-      .limit(TX_LOG_PAGE_SIZE),
-    supabase.from('public_dashboard_stats').select('*').maybeSingle(),
+      .limit(20),
+    supabase
+      .from('public_dashboard_stats')
+      .select('*')
+      .eq('network', network)
+      .maybeSingle(),
   ])
 
   if (sessionsRes.error) {
@@ -59,56 +69,36 @@ async function fetchDashboardData() {
   }
 }
 
-/**
- * Cursor-based pagination for the dashboard feeds.
- *
- * Accepts a `cursor` (ISO timestamp of the last row already shown) and a `limit`,
- * and returns the next batch ordered by the indexed timestamp column. The cursor
- * is exclusive (`WHERE opened_at < cursor` / `WHERE created_at < cursor`) so
- * subsequent pages never overlap with rows already rendered.
- */
-export async function loadMoreSessions(cursor: string, limit = SESSIONS_PAGE_SIZE) {
-  const supabase = getSupabaseServerClient()
-  const { data, error } = await supabase
-    .from('public_sessions')
-    .select(SESSION_COLUMNS)
-    .lt('opened_at', cursor)
-    .order('opened_at', { ascending: false })
-    .limit(limit)
-
-  if (error) {
-    console.error('[dashboard] failed to paginate public_sessions:', error.message)
-    throw new Error(error.message)
-  }
-
-  return (data ?? []) as Session[]
-}
-
-export async function loadMoreTxLog(cursor: string, limit = TX_LOG_PAGE_SIZE) {
-  const supabase = getSupabaseServerClient()
-  const { data, error } = await supabase
-    .from('tx_log')
-    .select('*')
-    .lt('created_at', cursor)
-    .order('created_at', { ascending: false })
-    .limit(limit)
-
-  if (error) {
-    console.error('[dashboard] failed to paginate tx_log:', error.message)
-    throw new Error(error.message)
-  }
-
-  return (data ?? []) as TxLogEntry[]
-}
-
-export default async function DashboardPage() {
-  const { sessions, txLog, stats, hasError } = await fetchDashboardData()
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: { [key: string]: string | string[] | undefined }
+}) {
+  const network = resolveNetwork(searchParams?.network)
+  const { sessions, txLog, stats, hasError } = await fetchDashboardData(network)
 
   return (
     <div className="min-h-screen bg-[var(--bg-base)]">
-      <DashboardHeader />
+      <DashboardHeader network={network} />
 
       <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        <div className="flex items-center gap-2">
+          <span
+            className={
+              network === 'mainnet'
+                ? 'inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-400'
+                : 'inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-400'
+            }
+          >
+            {network === 'mainnet' ? 'Mainnet' : 'Testnet'}
+          </span>
+          <span className="text-xs text-[var(--text-muted)]">
+            {network === 'mainnet'
+              ? 'Showing real-value mainnet activity'
+              : 'Showing testnet activity — no real value'}
+          </span>
+        </div>
+
         {hasError && (
           <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
             Some dashboard data could not be loaded from the registry. Figures below may be
